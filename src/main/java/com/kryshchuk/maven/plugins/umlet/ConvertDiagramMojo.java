@@ -50,103 +50,141 @@ import com.kryshchuk.maven.plugins.filevisitor.VisitorException;
 @Mojo(name = "convert", defaultPhase = LifecyclePhase.PRE_SITE, threadSafe = true, requiresProject = true)
 public class ConvertDiagramMojo extends AbstractMojo {
 
-  /**
-   * Target directory to store the converted images. If the source directory contains the sub-directories with diagram
-   * sources the generated image files will be created in the same sub-directories under the target directory. For
-   * example, the diagram <code>sourceDirectory/overview.uxf</code> will be converted into
-   * <code>outputDirectory/overview.png</code>, and the directory <code>sourceDirectory/sub1/sub2/details.uxf</code>
-   * will be converted into <code>outputDirectory/sub1/sub2/details.png</code>
-   * 
-   * @since 1.0.0
-   */
-  @Parameter(defaultValue = "${project.reporting.outputDirectory}/uml", property = "umlet.targetDir", required = true)
-  private File outputDirectory;
+	/**
+	 * Target directory to store the converted images. If the source directory
+	 * contains the sub-directories with diagram sources the generated image
+	 * files will be created in the same sub-directories under the target
+	 * directory. For example, the diagram
+	 * <code>sourceDirectory/overview.uxf</code> will be converted into
+	 * <code>outputDirectory/overview.png</code>, and the directory
+	 * <code>sourceDirectory/sub1/sub2/details.uxf</code> will be converted into
+	 * <code>outputDirectory/sub1/sub2/details.png</code>
+	 * 
+	 * @since 1.0.0
+	 */
+	@Parameter(defaultValue = "${project.reporting.outputDirectory}/uml", property = "umlet.targetDir", required = true)
+	private File outputDirectory;
 
-  @Parameter(required = false)
-  private List<FileSet> filesets;
+	@Parameter(required = false)
+	private List<FileSet> filesets;
 
-  /**
-   * Convert diagram to this image format. Supported formats are <code>bmp</code>, <code>eps</code>, <code>gif</code>,
-   * <code>jpg</code>, <code>pdf</code>, <code>png</code> and <code>svg</code>.
-   * 
-   * @since 1.0.0
-   */
-  @Parameter(defaultValue = "png", property = "umlet.format", required = true)
-  private ConvertFormat format;
+	/**
+	 * Convert diagram to this image format. Supported formats are
+	 * <code>bmp</code>, <code>eps</code>, <code>gif</code>, <code>jpg</code>,
+	 * <code>pdf</code>, <code>png</code> and <code>svg</code>.
+	 * 
+	 * @since 1.0.0
+	 */
+	@Parameter(defaultValue = "png", property = "umlet.format", required = true, alias = "format")
+	private String format;
 
-  @Parameter(defaultValue = "${project}", required = true, readonly = true)
-  private MavenProject mavenProject;
+	/**
+	 * For some reason this enum type parameter fails to be assigned
+	 * auto-magically with the parameter annotation in some cases. A string 
+	 * parameter is used instead an converted to enum through an accessor.
+	 */
+	private ConvertFormat format_ = null;
 
-  private final FileVisitor visitor = new AbstractFileVisitor() {
+	@Parameter(defaultValue = "${project}", required = true, readonly = true)
+	private MavenProject mavenProject;
 
-    @Override
-    protected boolean shouldOverwrite(final File inputFile, final File outputFile) {
-      return false;
-    }
+	/**
+	 * Accessor for the image format parameter.
+	 * 
+	 * @return image format
+	 */
+	private ConvertFormat getFormat() {
+		if (format_ == null) {
+			try {
+				format_ = ConvertFormat.valueOf(format);
+			} catch (IllegalArgumentException iae) {
+				getLog().error("Unsupported format " + format, iae);
+			} catch (NullPointerException np) {
+				getLog().error("Missing format parameter", np);
+			}
+		}
+		return format_;
+	}
 
-    @Override
-    protected void handleFile(final File inputFile, final File outputFile) throws VisitorException {
-      verifyParentDirectory(outputFile);
-      Program.RUNTIME_TYPE = RuntimeType.BATCH;
-      final DiagramHandler diagramHandler = new DiagramHandler(inputFile);
-      try {
-        getLog().info("Converting " + inputFile);
-        diagramHandler.getFileHandler().doExportAs(format.name(), outputFile);
-      } catch (final IOException e) {
-        getLog().error("Failed to convert diagram", e);
-        throw new VisitorException("Cannot convert diagram " + inputFile, e);
-      }
-    }
-  };
+	private final FileVisitor visitor = new AbstractFileVisitor() {
 
-  /**
-   * <p>
-   * execute.
-   * </p>
-   * 
-   * @throws org.apache.maven.plugin.MojoExecutionException
-   *           if any.
-   * @throws org.apache.maven.plugin.MojoFailureException
-   *           if any.
-   * @since 1.0.8
-   */
-  @Override
-  public void execute() throws MojoExecutionException, MojoFailureException {
-    StaticLoggerBinder.getSingleton().setLog(getLog());
-    if (filesets == null || filesets.isEmpty()) {
-      getLog().info("Using default diagrams location");
-      processFileSet(new DefaultDiagramSet());
-    } else {
-      for (final FileSet fs : filesets) {
-        processFileSet(fs);
-      }
-    }
-  }
+		@Override
+		protected boolean shouldOverwrite(final File inputFile,
+				final File outputFile) {
+			return false;
+		}
 
-  /**
-   * @param fileSet
-   *          fileset to process
-   * @throws MojoExecutionException
-   */
-  private void processFileSet(final FileSet fileSet) throws MojoExecutionException {
-    final FileMapper fileMapper = new ReplaceExtensionFileMapper(fileSet.getDirectory(), outputDirectory, format.name());
-    final FileSetIterator i = new FileSetIterator(fileSet, fileMapper);
-    try {
-      i.iterate(visitor);
-    } catch (final VisitorException e) {
-      throw new MojoExecutionException("Failed to iterate fileset", e);
-    }
-  }
+		@Override
+		protected void handleFile(final File inputFile, final File outputFile)
+				throws VisitorException {
+			verifyParentDirectory(outputFile);
+			Program.RUNTIME_TYPE = RuntimeType.BATCH;
+			final DiagramHandler diagramHandler = new DiagramHandler(inputFile);
+			try {		
+				getLog().info("Converting " + inputFile);
+			
+				diagramHandler.getFileHandler().doExportAs(getFormat().name(),
+						outputFile);
+			} catch (final IOException e) {
+				getLog().error("Failed to convert diagram", e);
+				throw new VisitorException("Cannot convert diagram "
+						+ inputFile, e);
+			}
+		}
+	};
 
-  private class DefaultDiagramSet extends FileSet {
+	/**
+	 * <p>
+	 * execute.
+	 * </p>
+	 * 
+	 * @throws org.apache.maven.plugin.MojoExecutionException
+	 *             if any.
+	 * @throws org.apache.maven.plugin.MojoFailureException
+	 *             if any.
+	 * @since 1.0.8
+	 */
+	@Override
+	public void execute() throws MojoExecutionException, MojoFailureException {
+		StaticLoggerBinder.getSingleton().setLog(getLog());
+		getLog().info("Output format: " + getFormat());
+		if (filesets == null || filesets.isEmpty()) {
+			getLog().info("Using default diagrams location");
+			processFileSet(new DefaultDiagramSet());
+		} else {
+			for (final FileSet fs : filesets) {
+				processFileSet(fs);
+			}
+		}
+	}
 
-    /**
+	/**
+	 * @param fileSet
+	 *            fileset to process
+	 * @throws MojoExecutionException
+	 */
+	private void processFileSet(final FileSet fileSet)
+			throws MojoExecutionException {
+		final FileMapper fileMapper = new ReplaceExtensionFileMapper(
+				fileSet.getDirectory(), outputDirectory, getFormat().name());
+		final FileSetIterator i = new FileSetIterator(fileSet, fileMapper);
+		try {
+			i.iterate(visitor);
+		} catch (final VisitorException e) {
+			throw new MojoExecutionException("Failed to iterate fileset", e);
+		}
+	}
+
+	private class DefaultDiagramSet extends FileSet {
+
+		/**
      * 
      */
-    DefaultDiagramSet() {
-      final File diagramsDirectory = new File(mavenProject.getBasedir(), "src/site/resources/uml");
-      setDirectory(diagramsDirectory);
-      setIncludes(Arrays.asList("**/*.uxf"));
-    }
-  }
+		DefaultDiagramSet() {
+			final File diagramsDirectory = new File(mavenProject.getBasedir(),
+					"src/site/resources/uml");
+			setDirectory(diagramsDirectory);
+			setIncludes(Arrays.asList("**/*.uxf"));
+		}
+	}
 }
